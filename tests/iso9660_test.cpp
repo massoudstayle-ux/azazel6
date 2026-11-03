@@ -52,6 +52,7 @@ std::vector<std::uint8_t> make_image() {
     image[pvd_offset + 1] = 'C'; image[pvd_offset + 2] = 'D';
     image[pvd_offset + 3] = '0'; image[pvd_offset + 4] = '0';
     image[pvd_offset + 5] = '1'; image[pvd_offset + 6] = 1;
+    put_both32(image, pvd_offset + 80, 24);
     put_both16(image, pvd_offset + 128, static_cast<std::uint16_t>(kSectorSize));
     const auto root = record(20, kSectorSize, 2, std::string(1, '\0'));
     std::copy(root.begin(), root.end(), image.begin() + static_cast<std::ptrdiff_t>(pvd_offset + 156));
@@ -125,6 +126,14 @@ void reject_bad_inputs() {
     auto bad_root_extent = bytes;
     put_both32(bad_root_extent, 16 * kSectorSize + 158, 999);
     must_throw([&] { Image image(bad_root_extent); }, "Out-of-bounds root extent accepted");
+
+    auto bad_volume_size = bytes;
+    put_both32(bad_volume_size, 16 * kSectorSize + 80, 20);
+    must_throw([&] { Image image(bad_volume_size); }, "Volume size smaller than root extent accepted");
+
+    auto interleaved = bytes;
+    interleaved[20 * kSectorSize + 34 + 34 + 26] = 1;
+    must_throw([&] { Image image(interleaved).list(); }, "Interleaved file accepted");
 
     auto multi_extent = bytes;
     multi_extent[20 * kSectorSize + 34 + 34 + 38 + 25] |= 0x80;
