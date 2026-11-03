@@ -37,3 +37,17 @@ file access patterns are understood.
 The synthetic test target is `azazel6_iso_tests` and the CTest name is
 `azazel6_iso9660`. It creates a tiny in-memory image; no commercial game data
 is stored in the repository.
+
+## Running the host-side test
+
+From the repository root, with CMake 3.22+ and a C++20 compiler installed:
+
+```sh
+cmake -S . -B build -DBUILD_TESTING=ON -DAZAZEL6_FRAMEWORK=OFF
+cmake --build build --target azazel6_iso_tests --parallel 2
+ctest --test-dir build -R azazel6_iso9660 --output-on-failure
+```
+
+The commands above have been documented for reproducibility; they have not yet
+been executed in this change environment. A green GitHub Actions run or local
+CTest result is still required before treating the parser as build-verified.
