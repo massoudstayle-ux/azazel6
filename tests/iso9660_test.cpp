@@ -122,6 +122,14 @@ void reject_bad_inputs() {
     bad_both_endian[16 * kSectorSize + 130] ^= 1;
     must_throw([&] { Image image(bad_both_endian); }, "Mismatched endian field accepted");
 
+    auto bad_root_extent = bytes;
+    put_both32(bad_root_extent, 16 * kSectorSize + 158, 999);
+    must_throw([&] { Image image(bad_root_extent); }, "Out-of-bounds root extent accepted");
+
+    auto multi_extent = bytes;
+    multi_extent[20 * kSectorSize + 34 + 34 + 38 + 25] |= 0x80;
+    must_throw([&] { Image image(multi_extent).list(); }, "Multi-extent file accepted");
+
     Image image(bytes);
     must_throw([&] { (void)image.find("../secret"); }, "Parent traversal accepted");
     must_throw([&] { (void)image.find("DATA/NOPE"); }, "Missing path accepted");
