@@ -61,7 +61,7 @@ bool range_fits(std::size_t total, std::uint64_t offset, std::uint64_t length) {
     return offset <= total && length <= static_cast<std::uint64_t>(total) - offset;
 }
 
-Entry parse_record(std::span<const std::uint8_t> record, std::size_t image_size) {
+Entry parse_record(std::span<const std::uint8_t> record, std::size_t image_size, std::uint32_t volume_blocks) {
     if (record.size() < 34) invalid("ISO9660 directory record is too short");
     const auto record_length = record[0];
     const auto name_length = record[32];
@@ -70,6 +70,7 @@ Entry parse_record(std::span<const std::uint8_t> record, std::size_t image_size)
         invalid("Malformed ISO9660 directory record length");
     }
     if (record[25] & 0x80u) invalid("Multi-extent ISO9660 files are not supported yet");
+    if (record[26] != 0 || record[27] != 0) invalid("Interleaved ISO9660 files are not supported yet");
 
     Entry entry;
     entry.extent_lba = both32(record, 2);
@@ -77,6 +78,10 @@ Entry parse_record(std::span<const std::uint8_t> record, std::size_t image_size)
     entry.directory = (record[25] & 0x02u) != 0;
 
     const auto offset = static_cast<std::uint64_t>(entry.extent_lba) * kSectorSize;
+    const auto sectors = (static_cast<std::uint64_t>(entry.size) + kSectorSize - 1) / kSectorSize;
+    if (entry.extent_lba > volume_blocks || sectors > volume_blocks - entry.extent_lba) {
+        invalid("ISO9660 extent exceeds declared volume bounds");
+    }
     if (!range_fits(image_size, offset, entry.size)) invalid("ISO9660 extent exceeds image bounds");
 
     if (name_length == 1 && (record[33] == 0 || record[33] == 1)) {
@@ -162,10 +167,15 @@ Image::Image(std::span<const std::uint8_t> bytes) : bytes_(bytes) {
     }
     if (!found_primary) invalid("ISO9660 primary volume descriptor not found");
     if (both16(primary, 128) != kSectorSize) invalid("Unsupported ISO9660 logical block size");
+    volume_block_count_ = both32(primary, 80);
+    if (volume_block_count_ == 0 ||
+        static_cast<std::uint64_t>(volume_block_count_) * kSectorSize > bytes_.size()) {
+        invalid("Invalid ISO9660 declared volume size");
+    }
 
     const auto root_length = primary[156];
     if (root_length < 34 || root_length > 255) invalid("Invalid ISO9660 root directory record");
-    root_ = parse_record(primary.subspan(156, root_length), bytes_.size());
+    root_ = parse_record(primary.subspan(156, root_length), bytes_.size(), volume_block_count_);
     if (!root_.directory) invalid("ISO9660 root record is not a directory");
     root_.name = "/";
 }
@@ -176,6 +186,7 @@ std::uint64_t Image::byte_offset(const Entry& entry) const {
 
 std::vector<Entry> Image::read_directory(const Entry& directory) const {
     if (!directory.directory) invalid("ISO9660 path component is not a directory");
+    if (directory.size > kMaxDirectoryBytes) invalid("ISO9660 directory exceeds configured size limit");
     const auto offset = byte_offset(directory);
     if (!range_fits(bytes_.size(), offset, directory.size)) invalid("ISO9660 directory exceeds image bounds");
     const auto data = bytes_.subspan(static_cast<std::size_t>(offset), directory.size);
@@ -192,8 +203,11 @@ std::vector<Entry> Image::read_directory(const Entry& directory) const {
             (cursor % kSectorSize) + record_length > kSectorSize) {
             invalid("Malformed or cross-sector ISO9660 directory record");
         }
-        auto entry = parse_record(data.subspan(cursor, record_length), bytes_.size());
-        if (entry.name != "." && entry.name != "..") entries.push_back(std::move(entry));
+        auto entry = parse_record(data.subspan(cursor, record_length), bytes_.size(), volume_block_count_);
+        if (entry.name != "." && entry.name != "..") {
+            if (entries.size() >= kMaxDirectoryEntries) invalid("ISO9660 directory has too many entries");
+            entries.push_back(std::move(entry));
+        }
         cursor += record_length;
     }
     return entries;
