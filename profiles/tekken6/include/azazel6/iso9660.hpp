@@ -11,6 +11,8 @@ namespace azazel6::iso9660 {
 
 inline constexpr std::size_t kSectorSize = 2048;
 inline constexpr std::size_t kDefaultMaxFileBytes = 64u * 1024u * 1024u;
+inline constexpr std::size_t kMaxDirectoryBytes = 16u * 1024u * 1024u;
+inline constexpr std::size_t kMaxDirectoryEntries = 65536;
 
 struct Entry {
     std::string name;
@@ -33,6 +35,7 @@ public:
 private:
     std::span<const std::uint8_t> bytes_;
     Entry root_;
+    std::uint32_t volume_block_count_ = 0;
 
     [[nodiscard]] std::vector<Entry> read_directory(const Entry& directory) const;
     [[nodiscard]] std::uint64_t byte_offset(const Entry& entry) const;
