@@ -10,12 +10,12 @@ The Tekken 6 profile now has an isolated, read-only ISO9660 parser in
 - Requires the ISO9660 identifier `CD001`, descriptor version 1, and 2048-byte
   logical blocks.
 - Checks both little-endian and big-endian copies of 16-bit and 32-bit fields.
-- Checks every extent against the supplied image byte span before accessing it.
+- Checks the declared volume-space size and every extent against both the image byte span and declared volume bounds before accessing it.
 - Lists directories and finds paths case-insensitively.
 - Removes the common `;1` file-version suffix from identifiers.
 - Rejects parent-directory traversal, unsupported identifier characters,
-  malformed/cross-sector directory records, directory cycles, and multi-extent
-  records.
+  malformed/cross-sector directory records, directory cycles, multi-extent and
+  interleaved records. Directory parsing is capped at 16 MiB and 65,536 entries.
 - Reads individual files with a default 64 MiB limit. The caller owns and keeps
   the source image bytes alive for the lifetime of the `Image` object.
 
