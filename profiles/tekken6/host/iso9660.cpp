@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <unordered_set>
+#include <utility>
 
 namespace azazel6::iso9660 {
 namespace {
