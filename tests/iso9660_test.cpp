@@ -131,6 +131,14 @@ void reject_bad_inputs() {
     put_both32(bad_volume_size, 16 * kSectorSize + 80, 20);
     must_throw([&] { Image image(bad_volume_size); }, "Volume size smaller than root extent accepted");
 
+    auto bad_file_extent = bytes;
+    put_both32(bad_file_extent, 20 * kSectorSize + 34 + 34 + 38 + 2, 24);
+    must_throw([&] { Image image(bad_file_extent).list(); }, "File extent beyond volume accepted");
+
+    auto bad_identifier_length = bytes;
+    bad_identifier_length[20 * kSectorSize + 34 + 34 + 32] = 250;
+    must_throw([&] { Image image(bad_identifier_length).list(); }, "Oversized identifier accepted");
+
     auto interleaved = bytes;
     interleaved[20 * kSectorSize + 34 + 34 + 26] = 1;
     must_throw([&] { Image image(interleaved).list(); }, "Interleaved file accepted");
