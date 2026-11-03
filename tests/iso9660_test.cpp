@@ -133,19 +133,19 @@ void reject_bad_inputs() {
 
     auto bad_file_extent = bytes;
     put_both32(bad_file_extent, 20 * kSectorSize + 34 + 34 + 38 + 2, 24);
-    must_throw([&] { Image image(bad_file_extent).list(); }, "File extent beyond volume accepted");
+    must_throw([&] { (void)Image(bad_file_extent).list(); }, "File extent beyond volume accepted");
 
     auto bad_identifier_length = bytes;
     bad_identifier_length[20 * kSectorSize + 34 + 34 + 32] = 250;
-    must_throw([&] { Image image(bad_identifier_length).list(); }, "Oversized identifier accepted");
+    must_throw([&] { (void)Image(bad_identifier_length).list(); }, "Oversized identifier accepted");
 
     auto interleaved = bytes;
     interleaved[20 * kSectorSize + 34 + 34 + 26] = 1;
-    must_throw([&] { Image image(interleaved).list(); }, "Interleaved file accepted");
+    must_throw([&] { (void)Image(interleaved).list(); }, "Interleaved file accepted");
 
     auto multi_extent = bytes;
     multi_extent[20 * kSectorSize + 34 + 34 + 38 + 25] |= 0x80;
-    must_throw([&] { Image image(multi_extent).list(); }, "Multi-extent file accepted");
+    must_throw([&] { (void)Image(multi_extent).list(); }, "Multi-extent file accepted");
 
     Image image(bytes);
     must_throw([&] { (void)image.find("../secret"); }, "Parent traversal accepted");
