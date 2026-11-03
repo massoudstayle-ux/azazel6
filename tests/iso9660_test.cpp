@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -44,12 +45,6 @@ std::vector<std::uint8_t> record(std::uint32_t lba, std::uint32_t size,
     return out;
 }
 
-void append_record(std::vector<std::uint8_t>& sector, std::size_t& cursor,
-                   const std::vector<std::uint8_t>& item) {
-    std::copy(item.begin(), item.end(), sector.begin() + static_cast<std::ptrdiff_t>(cursor));
-    cursor += item.size();
-}
-
 std::vector<std::uint8_t> make_image() {
     std::vector<std::uint8_t> image(24 * kSectorSize);
     const auto pvd_offset = 16 * kSectorSize;
@@ -57,9 +52,9 @@ std::vector<std::uint8_t> make_image() {
     image[pvd_offset + 1] = 'C'; image[pvd_offset + 2] = 'D';
     image[pvd_offset + 3] = '0'; image[pvd_offset + 4] = '0';
     image[pvd_offset + 5] = '1'; image[pvd_offset + 6] = 1;
-    put_both16(image, pvd_offset + 128, kSectorSize);
-    const auto root = record(20, kSectorSize, 2, std::string(1, '\\0'));
-    std::copy(root.begin(), root.end(), image.begin() + pvd_offset + 156);
+    put_both16(image, pvd_offset + 128, static_cast<std::uint16_t>(kSectorSize));
+    const auto root = record(20, kSectorSize, 2, std::string(1, '\0'));
+    std::copy(root.begin(), root.end(), image.begin() + static_cast<std::ptrdiff_t>(pvd_offset + 156));
     return image;
 }
 
@@ -75,14 +70,17 @@ std::vector<std::uint8_t> fixture() {
         std::copy(item->begin(), item->end(), root_sector.begin() + static_cast<std::ptrdiff_t>(cursor));
         cursor += item->size();
     }
+
     auto child_sector = std::span<std::uint8_t>(image).subspan(21 * kSectorSize, kSectorSize);
     cursor = 0;
-    for (const auto* item : {&record(21, kSectorSize, 2, std::string(1, '\0')),
-                             &record(20, kSectorSize, 2, std::string(1, '\1'))}) {
+    const auto child_dot = record(21, kSectorSize, 2, std::string(1, '\0'));
+    const auto child_dotdot = record(20, kSectorSize, 2, std::string(1, '\1'));
+    for (const auto* item : {&child_dot, &child_dotdot}) {
         std::copy(item->begin(), item->end(), child_sector.begin() + static_cast<std::ptrdiff_t>(cursor));
         cursor += item->size();
     }
-    const std::array<std::uint8_t, 5> payload{'h','e','l','l','o'};
+
+    const std::array<std::uint8_t, 5> payload{'h', 'e', 'l', 'l', 'o'};
     std::copy(payload.begin(), payload.end(), image.begin() + 22 * kSectorSize);
     return image;
 }
@@ -111,15 +109,19 @@ void reject_bad_inputs() {
     auto bytes = fixture();
     must_throw([&] { Image truncated(std::span<const std::uint8_t>(bytes).first(10)); },
                "Truncated image accepted");
+
     auto bad_signature = bytes;
     bad_signature[16 * kSectorSize + 1] = 'X';
     must_throw([&] { Image image(bad_signature); }, "Bad descriptor signature accepted");
+
     auto bad_block_size = bytes;
     put_both16(bad_block_size, 16 * kSectorSize + 128, 1024);
     must_throw([&] { Image image(bad_block_size); }, "Unsupported block size accepted");
+
     auto bad_both_endian = bytes;
     bad_both_endian[16 * kSectorSize + 130] ^= 1;
     must_throw([&] { Image image(bad_both_endian); }, "Mismatched endian field accepted");
+
     Image image(bytes);
     must_throw([&] { (void)image.find("../secret"); }, "Parent traversal accepted");
     must_throw([&] { (void)image.find("DATA/NOPE"); }, "Missing path accepted");
