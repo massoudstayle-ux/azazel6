@@ -52,17 +52,14 @@ void append_record(std::vector<std::uint8_t>& sector, std::size_t& cursor,
 
 std::vector<std::uint8_t> make_image() {
     std::vector<std::uint8_t> image(24 * kSectorSize);
-    auto* pvd = image.data() + 16 * kSectorSize;
-    pvd[0] = 1;
-    pvd[1] = 'C'; pvd[2] = 'D'; pvd[3] = '0'; pvd[4] = '0'; pvd[5] = '1'; pvd[6] = 1;
-    put_both16(image, 16 * kSectorSize + 128, kSectorSize);
-    const auto root = record(20, kSectorSize, 2, std::string(1, '\0'));
-    std::copy(root.begin(), root.end(), image.begin() + 16 * kSectorSize + 156);
-
-    auto& directory = *reinterpret_cast<std::array<std::uint8_t, kSectorSize>*>(
-        image.data() + 20 * kSectorSize);
-    std::size_t cursor = 0;
-    append_record(*reinterpret_cast<std::vector<std::uint8_t>*>(&directory), cursor, {});
+    const auto pvd_offset = 16 * kSectorSize;
+    image[pvd_offset] = 1;
+    image[pvd_offset + 1] = 'C'; image[pvd_offset + 2] = 'D';
+    image[pvd_offset + 3] = '0'; image[pvd_offset + 4] = '0';
+    image[pvd_offset + 5] = '1'; image[pvd_offset + 6] = 1;
+    put_both16(image, pvd_offset + 128, kSectorSize);
+    const auto root = record(20, kSectorSize, 2, std::string(1, '\\0'));
+    std::copy(root.begin(), root.end(), image.begin() + pvd_offset + 156);
     return image;
 }
 
