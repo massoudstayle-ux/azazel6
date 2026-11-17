@@ -39,6 +39,14 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android platform and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -61,7 +69,6 @@ jobs:
             gradle --no-daemon -p "$PROJECT_DIR" assembleDebug
           else
             echo "No Gradle Android project was found in the uploaded archive."
-            echo "Archive inventory is available in the inspection artifact."
             exit 2
           fi
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
