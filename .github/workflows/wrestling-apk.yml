@@ -1,0 +1,88 @@
+name: Wrestling Android APK
+on:
+  push:
+    paths:
+      - '.github/workflows/wrestling-apk.yml'
+      - 'tests/wrestling-android-project.zip'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout wrestling project source
+        uses: actions/checkout@v4
+
+      - name: Verify and inspect the uploaded archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="tests/wrestling-android-project.zip"
+          test -s "$ZIP"
+          mkdir -p build-inspection wrestling-project
+          sha256sum "$ZIP" | tee build-inspection/archive-sha256.txt
+          unzip -t "$ZIP" | tee build-inspection/archive-integrity.txt
+          unzip -l "$ZIP" | tee build-inspection/archive-files.txt
+          unzip -q "$ZIP" -d wrestling-project
+          find wrestling-project -maxdepth 5 -type f | sort > build-inspection/extracted-files.txt
+          echo "Archive size: $(stat -c%s "$ZIP") bytes" | tee build-inspection/summary.txt
+          echo "Extracted files: $(find wrestling-project -type f | wc -l)" | tee -a build-inspection/summary.txt
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK from the wrestling project only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/wrestling-project"
+          WRAPPER="$(find "$ROOT" -type f -name gradlew -print -quit)"
+          BUILD_FILE="$(find "$ROOT" -type f \( -name build.gradle -o -name build.gradle.kts \) -print -quit)"
+          if [ -n "$WRAPPER" ]; then
+            PROJECT_DIR="$(dirname "$WRAPPER")"
+            chmod +x "$WRAPPER"
+            (cd "$PROJECT_DIR" && ./gradlew --no-daemon assembleDebug)
+          elif [ -n "$BUILD_FILE" ]; then
+            PROJECT_DIR="$(dirname "$BUILD_FILE")"
+            gradle --no-daemon -p "$PROJECT_DIR" assembleDebug
+          else
+            echo "No Gradle Android project was found in the uploaded archive."
+            echo "Archive inventory is available in the inspection artifact."
+            exit 2
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          find "$ROOT" -type f -path '*/build/outputs/apk/*/*.apk' -exec cp {} "$GITHUB_WORKSPACE/apk-output/" \;
+          test -n "$(find "$GITHUB_WORKSPACE/apk-output" -maxdepth 1 -name '*.apk' -print -quit)"
+          ls -lh "$GITHUB_WORKSPACE/apk-output"
+
+      - name: Upload archive inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrestling-project-inspection
+          path: build-inspection/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload wrestling APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrestling-android-apk
+          path: apk-output/*.apk
+          if-no-files-found: error
+          retention-days: 14
